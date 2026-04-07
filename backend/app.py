@@ -15,7 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-HF_TOKEN = os.getenv("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")
+HF_TOKEN = os.getenv("HF_TOKEN")
 MODEL = "google/flan-t5-small"
 
 
