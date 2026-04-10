@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "data-eng-backend"
+version = "0.1.0"
+description = ""
+authors = []
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "0.115.0"
+uvicorn = {version = "0.30.6", extras = ["standard"]}
+python-multipart = "0.0.9"
+huggingface-hub = ">=0.24.0"
+pandas = "2.2.2"
+matplotlib = "3.9.2"
+seaborn = "0.13.2"
+yfinance = ">=0.2.54"
+scipy = "1.14.1"
+numpy = "1.26.4"
+Pillow = "10.4.0"
+requests = "2.32.3"
+python-dotenv = ">=1.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
