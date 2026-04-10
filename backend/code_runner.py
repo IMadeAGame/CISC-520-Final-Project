@@ -2,8 +2,10 @@ import subprocess
 import tempfile
 import os
 import base64
-from pathlib import Path
+import logging
+import time
 
+logger = logging.getLogger(__name__)
 
 PREAMBLE = """
 import pandas as pd
@@ -19,7 +21,7 @@ import io, base64, json, os, sys, warnings, time, random
 warnings.filterwarnings("ignore")
 
 def yf_download(ticker, period=None, start=None, end=None, interval="1d", max_retries=5):
-    """yfinance wrapper with exponential backoff for 429 rate limits."""
+    # yfinance wrapper with exponential backoff for 429 rate limits
     for attempt in range(max_retries):
         try:
             kwargs = dict(progress=False, auto_adjust=True)
@@ -100,6 +102,10 @@ def run_code(code: str, csv_data: str | None = None, timeout: int = 90) -> dict:
         with open(script_path, "w") as f:
             f.write(full_code)
 
+        code_lines = code.strip().count("\n") + 1
+        logger.info("[runner] executing | lines=%d | timeout=%ds", code_lines, timeout)
+        t_start = time.monotonic()
+
         try:
             result = subprocess.run(
                 ["python3", script_path],
@@ -108,16 +114,27 @@ def run_code(code: str, csv_data: str | None = None, timeout: int = 90) -> dict:
                 timeout=timeout,
                 cwd=tmp_dir,
             )
+            elapsed = time.monotonic() - t_start
             stdout = result.stdout
             stderr = result.stderr
+            returncode = result.returncode
+
+            logger.info("[runner] done | exit=%d | elapsed=%.2fs | stdout_chars=%d | stderr_chars=%d",
+                        returncode, elapsed, len(stdout), len(stderr))
+
+            if stderr.strip():
+                logger.warning("[runner] stderr | %s", stderr[:500])
 
         except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - t_start
+            logger.error("[runner] timeout | elapsed=%.2fs", elapsed)
             return {
                 "stdout": "",
                 "stderr": f"Execution timed out after {timeout} seconds.",
                 "image_b64": None,
             }
         except Exception as e:
+            logger.error("[runner] exception | %s", e)
             return {
                 "stdout": "",
                 "stderr": str(e),
@@ -126,8 +143,10 @@ def run_code(code: str, csv_data: str | None = None, timeout: int = 90) -> dict:
 
         image_b64 = None
         if os.path.exists(plot_path):
+            size_kb = os.path.getsize(plot_path) // 1024
             with open(plot_path, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("utf-8")
+            logger.info("[runner] plot captured | size_kb=%d | b64_chars=%d", size_kb, len(image_b64))
 
         return {
             "stdout": stdout,
