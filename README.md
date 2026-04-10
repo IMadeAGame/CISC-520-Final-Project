@@ -1,6 +1,6 @@
 # Data Analysis AI
 
-A full-stack AI-powered data analysis assistant. Upload a CSV or ask questions about financial data — the AI writes and executes Python code on the fly, returning charts and insights directly in the chat.
+A full-stack AI-powered data analysis assistant. Upload a CSV or ask questions about financial data — the AI writes and executes Python code on the fly, returning Bloomberg-style charts and insights directly in the chat.
 
 ---
 
@@ -8,10 +8,10 @@ A full-stack AI-powered data analysis assistant. Upload a CSV or ask questions a
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14, React 18, Tailwind CSS |
-| Backend | FastAPI, Uvicorn |
-| LLM | Hugging Face Inference API (`Qwen/Qwen2.5-72B-Instruct`) |
-| Code Execution | Python subprocess (sandboxed temp directory) |
+| Frontend | Vite, React 19 |
+| Backend | FastAPI, Uvicorn (deployed on Render) |
+| LLM | Anthropic Claude (`claude-opus-4-5`) |
+| Code Execution | Python subprocess (sandboxed temp directory, 30s timeout) |
 | Data Libraries | pandas, numpy, matplotlib, seaborn, yfinance, scipy |
 | Package Management | pip (backend), npm (frontend) |
 
@@ -20,9 +20,10 @@ A full-stack AI-powered data analysis assistant. Upload a CSV or ask questions a
 ## Architecture
 
 ```
-Browser (Next.js)
+Browser (Vite + React)
       |
       | POST /chat  (multipart/form-data: messages + optional CSV file)
+      | proxied via Vite dev server → deployed backend on Render
       v
 FastAPI  (main.py)
       |
@@ -30,7 +31,7 @@ FastAPI  (main.py)
 run_agent()  (agent.py)
       |
       |-- Builds message history with system prompt
-      |-- Calls HuggingFace InferenceClient  -->  Qwen2.5-72B-Instruct
+      |-- Calls Anthropic API  -->  claude-opus-4-5
       |
       |   Model decides to call tool: run_python_code(code="...")
       |
@@ -51,48 +52,21 @@ Tool result  { stdout, stderr, image_b64 }
       |
       v
 Agent appends result to message history, calls model again for final reply
+Self-correction: if stderr is non-empty, coaching message is added and Claude retries (up to 2x)
       |
       v
 ChatResponse  { reply, code_blocks, images, tables }
       |
       v
-Browser renders markdown reply + Bloomberg-style chart + tables
+Browser renders reply + Bloomberg-style chart + tables
 ```
 
 ### Key design decisions
 
 - **Agentic loop**: the model can call `run_python_code` multiple times (up to 8 iterations). If the code produces an error, it self-corrects and retries up to 2 times before giving up.
-- **Single data fetch rule**: the system prompt instructs the model to fetch all external data (e.g. yfinance) in one tool call and perform all analysis in the same block, avoiding redundant API hits.
+- **Single data fetch rule**: the system prompt instructs the model to fetch all external data (e.g. yfinance) in one tool call and perform all analysis in the same block.
 - **No isolation beyond temp dir**: code runs as a real subprocess on the host machine inside a `tempfile.TemporaryDirectory()`. There is no container or VM boundary.
-
----
-
-## HuggingFace Integration
-
-The backend uses [`huggingface_hub.InferenceClient`](https://huggingface.co/docs/huggingface_hub/guides/inference) to call the serverless Inference API.
-
-**Model**: `Qwen/Qwen2.5-72B-Instruct`
-- Strong tool-calling capability
-- Available on the free HuggingFace Inference API tier
-- OpenAI-compatible chat completions interface
-
-The client is initialized in `main.py`:
-
-```python
-from huggingface_hub import InferenceClient
-client = InferenceClient(token=os.environ["HF_TOKEN"])
-```
-
-Tool calls use the OpenAI-compatible format:
-
-```python
-client.chat.completions.create(
-    model="Qwen/Qwen2.5-72B-Instruct",
-    messages=[...],
-    tools=[{ "type": "function", "function": { ... } }],
-    max_tokens=4096,
-)
-```
+- **CORS**: the Vite dev server proxies `/api/*` to the deployed backend, avoiding cross-origin issues in development.
 
 ---
 
@@ -101,24 +75,29 @@ client.chat.completions.create(
 ```
 data_eng/
 ├── backend/
-│   ├── main.py            # FastAPI app, routes, client init
+│   ├── main.py            # FastAPI app, routes, Anthropic client init
 │   ├── agent.py           # Agentic loop, tool dispatch, self-correction
-│   ├── tools.py           # Tool schema (OpenAI format) and execution
+│   ├── tools.py           # Tool schema and execution dispatch
 │   ├── code_runner.py     # Subprocess execution, Bloomberg theme preamble
 │   ├── system_prompt.py   # LLM system prompt
 │   ├── models.py          # Pydantic request/response models
 │   ├── requirements.txt   # Python dependencies
 │   └── .env.example       # Environment variable template
 └── frontend/
-    ├── app/
-    │   ├── page.tsx
-    │   ├── layout.tsx
+    ├── src/
+    │   ├── main.tsx
+    │   ├── App.tsx
+    │   ├── index.css
     │   └── components/
-    │       ├── ChatInterface.tsx   # Main chat UI, API calls
-    │       ├── MessageBubble.tsx
-    │       ├── FileUpload.tsx
-    │       └── ExamplePrompts.tsx
-    ├── next.config.mjs
+    │       ├── ChatInterface.tsx   # Main chat UI, API calls, state
+    │       ├── MessageBubble.tsx   # Renders text + code + charts + tables
+    │       ├── CodeBlock.tsx       # Syntax-highlighted Python
+    │       ├── ChartImage.tsx      # Renders base64 PNG charts
+    │       ├── DataTable.tsx       # Renders JSON rows as a table
+    │       ├── FileUpload.tsx      # CSV file attachment
+    │       └── ExamplePrompts.tsx  # Starter prompt cards
+    ├── index.html
+    ├── vite.config.ts
     └── package.json
 ```
 
@@ -130,7 +109,7 @@ data_eng/
 
 - Python 3.11+
 - Node.js 18+
-- A free [HuggingFace account](https://huggingface.co/join) with an access token
+- An [Anthropic API key](https://console.anthropic.com/)
 
 ### Backend
 
@@ -139,7 +118,7 @@ cd backend
 pip install -r requirements.txt
 ```
 
-Copy the example env file and add your token:
+Copy the example env file and add your key:
 
 ```bash
 cp .env.example .env
@@ -148,10 +127,8 @@ cp .env.example .env
 Edit `.env`:
 
 ```
-HF_TOKEN=hf_your_token_here
+ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
-
-Get your token at: https://huggingface.co/settings/tokens (read access is sufficient)
 
 Start the server:
 
@@ -169,14 +146,22 @@ npm run dev
 
 The app will be available at `http://localhost:3000`.
 
+> The Vite dev server proxies `/api/*` to the backend. By default this points to the deployed Render backend. To use a local backend instead, update the `proxy.target` in `vite.config.ts`.
+
 ---
 
 ## Usage
 
 1. Open `http://localhost:3000`
-2. Type a question — e.g. *"Plot AAPL stock price for the last 6 months"*
-3. Optionally upload a CSV file for custom data analysis
+2. Click an example prompt or type your own — e.g. *"Plot AAPL stock price for the last 100 days"*
+3. Optionally upload a CSV file for custom dataset analysis
 4. The AI writes Python, executes it, and returns a Bloomberg-style chart with a written interpretation
+
+### Example prompts
+
+- *"Fetch the last 100 days of AAPL closing prices, plot a line chart, and compute mean, median, std, min, max"*
+- *"Analyze the uploaded CSV: show first 5 rows, column types, missing values, and a histogram"*
+- *"Compare TSLA and MSFT monthly returns over the past year, plot them, and run a t-test"*
 
 ---
 
@@ -184,4 +169,4 @@ The app will be available at `http://localhost:3000`.
 
 | Variable | Description |
 |---|---|
-| `HF_TOKEN` | HuggingFace access token (required) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (required) |
