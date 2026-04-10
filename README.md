@@ -1,5 +1,7 @@
 # Data Analysis AI
 
+**Live app:** https://stock-data-analysis-ai-front-end.onrender.com
+
 A full-stack AI-powered data analysis assistant. Upload a CSV or ask questions about financial data — the AI writes and executes Python code on the fly, returning Bloomberg-style charts and insights directly in the chat.
 
 ---
