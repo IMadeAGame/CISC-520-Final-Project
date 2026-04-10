@@ -15,8 +15,34 @@ import matplotlib.ticker as mticker
 import seaborn as sns
 import yfinance as yf
 from scipy import stats
-import io, base64, json, os, sys, warnings
+import io, base64, json, os, sys, warnings, time, random
 warnings.filterwarnings("ignore")
+
+def yf_download(ticker, period=None, start=None, end=None, interval="1d", max_retries=5):
+    """yfinance wrapper with exponential backoff for 429 rate limits."""
+    for attempt in range(max_retries):
+        try:
+            kwargs = dict(progress=False, auto_adjust=True)
+            if period:
+                kwargs["period"] = period
+            if start:
+                kwargs["start"] = start
+            if end:
+                kwargs["end"] = end
+            if interval != "1d":
+                kwargs["interval"] = interval
+            df = yf.download(ticker, **kwargs)
+            if df is not None and not df.empty:
+                df.columns = df.columns.get_level_values(0)
+                return df
+            time.sleep(2 ** attempt + random.uniform(0, 1))
+        except Exception as e:
+            if "429" in str(e) or "Too Many Requests" in str(e):
+                wait = 2 ** attempt + random.uniform(1, 3)
+                time.sleep(wait)
+            else:
+                raise
+    raise RuntimeError(f"Failed to fetch {ticker} after {max_retries} attempts (rate limited)")
 
 # Bloomberg-style theme
 BLOOMBERG_BG = "#000000"
@@ -62,7 +88,7 @@ matplotlib.rcParams.update({
 CSV_DATA = """
 
 
-def run_code(code: str, csv_data: str | None = None, timeout: int = 30) -> dict:
+def run_code(code: str, csv_data: str | None = None, timeout: int = 90) -> dict:
     csv_repr = repr(csv_data) if csv_data is not None else "None"
     preamble = PREAMBLE + csv_repr + "\n"
     full_code = preamble + "\n" + code

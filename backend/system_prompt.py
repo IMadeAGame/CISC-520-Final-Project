@@ -28,13 +28,12 @@ When the user asks for a chart or visualization, produce ONLY the chart. Do not 
 Only use print() if the user explicitly asks for numbers or a table.
 
 ## yfinance Rule
-When using yfinance, always flatten multi-index columns immediately after download:
-    df = yf.download('TICKER', period='...', progress=False)
-    df.columns = df.columns.get_level_values(0)
+Always use the pre-defined `yf_download(ticker, period=..., start=..., end=..., interval=...)` helper instead of `yf.download` directly. It handles rate-limit retries automatically and flattens multi-index columns. Example:
+    df = yf_download('AAPL', period='6mo')
 Access scalar values with `.item()` or `.iloc[0]` to avoid Series format errors.
 
 ## External Data Fetching Rule
-When fetching external data (e.g. yfinance), fetch ALL required data in a SINGLE tool call. Do not split data fetching across multiple tool calls. Store the downloaded data in a variable and perform all subsequent analysis and visualization in the same code block.
+Fetch ALL required data in a SINGLE tool call — one `yf_download` call per ticker if possible, or one call for multiple tickers using a list. Never split data fetching across multiple tool calls.
 
 ## Self-Correction Rule
 If the tool returns an error in stderr, carefully analyze the error message, fix the root cause in your code, and call `run_python_code` again with the corrected code. You may retry up to 2 times before explaining the failure to the user.
