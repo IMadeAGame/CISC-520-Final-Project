@@ -52,6 +52,5 @@ async def chat(
         if "429" in str(e) or "rate" in str(e).lower():
             logger.warning("rate limited by HuggingFace")
             return JSONResponse(status_code=429, content={"detail": "Rate limited. Please wait a moment and try again."})
-    except Exception as e:
         logger.exception("agent error: %s", e)
         return JSONResponse(status_code=500, content={"detail": str(e)})
