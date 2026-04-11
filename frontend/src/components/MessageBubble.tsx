@@ -11,7 +11,9 @@ export interface Message {
 }
 
 function renderText(text: string) {
-  return text.split('\n').map((line, i) => {
+  // Strip markdown image syntax with data URIs — images arrive via the images[] array instead
+  const cleaned = text.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '')
+  return cleaned.split('\n').map((line, i) => {
     const parts = line.split(/(\*\*[^*]+\*\*)/)
     return (
       <p key={i} style={{ marginBottom: 6, lineHeight: 1.6, minHeight: line ? undefined : 8 }}>
