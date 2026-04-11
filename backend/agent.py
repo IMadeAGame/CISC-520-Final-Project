@@ -209,6 +209,8 @@ def run_agent_stream(
         streaming_reply: bool | None = None  # None=undecided, True=text reply, False=tool calls
 
         for chunk in stream:
+            if not chunk.choices:
+                continue
             choice = chunk.choices[0]
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
