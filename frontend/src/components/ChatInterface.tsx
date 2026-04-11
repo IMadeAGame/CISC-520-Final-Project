@@ -3,7 +3,7 @@ import MessageBubble, { type Message } from './MessageBubble'
 import ExamplePrompts from './ExamplePrompts'
 import FileUpload from './FileUpload'
 
-const API_URL = '/api/chat'
+const API_URL = 'https://stock-data-analysis-ai-back-end.onrender.com/chat'
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
