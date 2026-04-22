@@ -27,7 +27,7 @@ function renderText(text: string) {
   })
 }
 
-export default function MessageBubble({ message }: { message: Message }) {
+export default function MessageBubble({ message, isStreaming = false }: { message: Message, isStreaming?: boolean }) {
   if (message.role === 'user') {
     return (
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
@@ -44,16 +44,18 @@ export default function MessageBubble({ message }: { message: Message }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
       <div style={{ maxWidth: '92%', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>AI</span>
+        {isStreaming && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>AI</span>
+            </div>
+            <span style={{ fontSize: 11, color: '#4b5563' }}>Data Analysis AI</span>
           </div>
-          <span style={{ fontSize: 11, color: '#4b5563' }}>Data Analysis AI</span>
-        </div>
+        )}
         <div style={{
           background: '#0f0f18', border: '1px solid #1f1f2e',
           borderRadius: '4px 16px 16px 16px', padding: '12px 14px',
@@ -66,6 +68,16 @@ export default function MessageBubble({ message }: { message: Message }) {
           {message.codeBlocks?.map((code, i) => <CodeBlock key={i} code={code} />)}
           {message.images?.map((img, i) => <ChartImage key={i} b64={img} />)}
           {message.tables?.map((table, i) => <DataTable key={i} rows={table} />)}
+          {isStreaming && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+              {[0, 150, 300].map(delay => (
+                <div key={delay} style={{
+                  width: 7, height: 7, borderRadius: '50%', background: '#3b82f6',
+                  animation: 'bounce 1s infinite', animationDelay: `${delay}ms`,
+                }} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

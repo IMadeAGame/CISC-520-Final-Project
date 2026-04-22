@@ -151,24 +151,10 @@ export default function ChatInterface() {
           </div>
         ) : (
           <div style={{ maxWidth: 780, margin: '0 auto', padding: '24px 16px' }}>
-            {messages.map((msg, i) => <MessageBubble key={i} message={msg} />)}
-            {loading && messages[messages.length - 1]?.content === '' && (
-              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
-                <div style={{
-                  background: '#0f0f18', border: '1px solid #1f1f2e',
-                  borderRadius: '4px 16px 16px 16px', padding: '12px 16px',
-                }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {[0, 150, 300].map(delay => (
-                      <div key={delay} style={{
-                        width: 7, height: 7, borderRadius: '50%', background: '#3b82f6',
-                        animation: 'bounce 1s infinite', animationDelay: `${delay}ms`,
-                      }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {messages.map((msg, i) => {
+              const isReceivingAssistant = loading && msg.role === 'assistant' && i === messages.length - 1
+              return <MessageBubble key={i} message={msg} isStreaming={isReceivingAssistant} />
+            })}
             <div ref={bottomRef} />
           </div>
         )}
