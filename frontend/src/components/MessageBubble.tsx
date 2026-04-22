@@ -11,8 +11,10 @@ export interface Message {
 }
 
 function renderText(text: string) {
-  // Strip markdown image syntax with data URIs — images arrive via the images[] array instead
-  const cleaned = text.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, '')
+  // Strip inline data URI markdown images, including partial in-progress streaming fragments.
+  const cleaned = text
+    .replace(/!\[[^\]]*\]\(\s*data:image\/[a-z0-9.+-]+;base64,[^)]*\)/gi, '')
+    .replace(/!\[[^\]]*\]\(\s*data:image\/[a-z0-9.+-]+;base64,[^)]*$/gi, '')
   return cleaned.split('\n').map((line, i) => {
     const parts = line.split(/(\*\*[^*]+\*\*)/)
     return (
