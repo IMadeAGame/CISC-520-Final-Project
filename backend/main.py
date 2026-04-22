@@ -5,20 +5,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient
 from models import ChatResponse
-from agent import run_agent
+from agent import run_agent, run_agent_stream
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Data Analysis AI")
 
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://stock-data-analysis-ai-front-end.onrender.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173", "https://stock-data-analysis-ai-front-end.onrender.com/"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,3 +62,39 @@ async def chat(
             return JSONResponse(status_code=429, content={"detail": "Rate limited. Please wait a moment and try again."})
         logger.exception("agent error: %s", e)
         return JSONResponse(status_code=500, content={"detail": str(e)})
+
+
+@app.post("/chat/stream")
+async def chat_stream(
+    messages: str = Form(...),
+    file: UploadFile | None = File(None),
+):
+    msgs = json.loads(messages)
+    csv_data = None
+    if file and file.filename:
+        contents = await file.read()
+        csv_data = contents.decode("utf-8")
+
+    logger.info("stream request: %d messages, file=%s", len(msgs), file.filename if file else None)
+
+    def generate():
+        try:
+            yield from run_agent_stream(msgs, csv_data, client)
+        except Exception as e:
+            if "429" in str(e) or "rate" in str(e).lower():
+                logger.warning("rate limited by HuggingFace (stream)")
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Rate limited. Please wait a moment and try again.'})}\n\n"
+            else:
+                logger.exception("stream agent error: %s", e)
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )

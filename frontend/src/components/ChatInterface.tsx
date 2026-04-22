@@ -3,7 +3,7 @@ import MessageBubble, { type Message } from './MessageBubble'
 import ExamplePrompts from './ExamplePrompts'
 import FileUpload from './FileUpload'
 
-const API_URL = 'https://stock-data-analysis-ai-back-end.onrender.com/chat'
+const API_URL = 'https://stock-data-analysis-ai-back-end.onrender.com/chat/stream'
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -30,6 +30,10 @@ export default function ChatInterface() {
     // Reset textarea height
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
+    // Add a placeholder assistant message we'll update as tokens arrive
+    const assistantIdx = updated.length
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+
     try {
       const formData = new FormData()
       formData.append('messages', JSON.stringify(
@@ -39,21 +43,66 @@ export default function ChatInterface() {
 
       const res = await fetch(API_URL, { method: 'POST', body: formData })
       if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      if (!res.body) throw new Error('No response body')
 
-      const data = await res.json()
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.reply || '',
-        codeBlocks: data.code_blocks || [],
-        images: data.images || [],
-        tables: data.tables || [],
-      }])
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const raw = line.slice(6).trim()
+          if (!raw) continue
+          let evt: Record<string, unknown>
+          try { evt = JSON.parse(raw) } catch { continue }
+
+          if (evt.type === 'token') {
+            setMessages(prev => {
+              const next = [...prev]
+              const msg = next[assistantIdx]
+              next[assistantIdx] = { ...msg, content: msg.content + (evt.content as string) }
+              return next
+            })
+          } else if (evt.type === 'done') {
+            setMessages(prev => {
+              const next = [...prev]
+              next[assistantIdx] = {
+                role: 'assistant',
+                content: (evt.reply as string) || prev[assistantIdx].content,
+                codeBlocks: (evt.code_blocks as string[]) || [],
+                images: (evt.images as string[]) || [],
+                tables: (evt.tables as Record<string, unknown>[][]) || [],
+              }
+              return next
+            })
+          } else if (evt.type === 'error') {
+            setMessages(prev => {
+              const next = [...prev]
+              next[assistantIdx] = { role: 'assistant', content: `Error: ${evt.message}` }
+              return next
+            })
+          }
+        }
+      }
+
       setFile(null)
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: ${err instanceof Error ? err.message : 'Something went wrong. Is the backend running on port 8000?'}`,
-      }])
+      setMessages(prev => {
+        const next = [...prev]
+        next[assistantIdx] = {
+          role: 'assistant',
+          content: `Error: ${err instanceof Error ? err.message : 'Something went wrong. Is the backend running?'}`,
+        }
+        return next
+      })
     } finally {
       setLoading(false)
     }
@@ -102,24 +151,10 @@ export default function ChatInterface() {
           </div>
         ) : (
           <div style={{ maxWidth: 780, margin: '0 auto', padding: '24px 16px' }}>
-            {messages.map((msg, i) => <MessageBubble key={i} message={msg} />)}
-            {loading && (
-              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
-                <div style={{
-                  background: '#0f0f18', border: '1px solid #1f1f2e',
-                  borderRadius: '4px 16px 16px 16px', padding: '12px 16px',
-                }}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {[0, 150, 300].map(delay => (
-                      <div key={delay} style={{
-                        width: 7, height: 7, borderRadius: '50%', background: '#3b82f6',
-                        animation: 'bounce 1s infinite', animationDelay: `${delay}ms`,
-                      }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {messages.map((msg, i) => {
+              const isReceivingAssistant = loading && msg.role === 'assistant' && i === messages.length - 1
+              return <MessageBubble key={i} message={msg} isStreaming={isReceivingAssistant} />
+            })}
             <div ref={bottomRef} />
           </div>
         )}
