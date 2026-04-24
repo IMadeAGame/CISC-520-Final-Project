@@ -21,6 +21,8 @@ A longer technical write-up (architecture, LLM, agents, evaluation) lives in [RE
 ## AI Resources
 
 AI was used to help in the production of the front-end + back-end and bug fixing such as adding streaming to the project.
+Claude Code was the main coding agent that was used to built the app. Sonnet4.6 and Sonnet4.7 were the major models used. 
+For initial design Opus4.6 was used to design the plan and Sonnet4.6 implemented the plan.
 
 
 ---
